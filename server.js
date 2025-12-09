@@ -55,7 +55,7 @@ app.use(`${API_PREFIX}/peaks`, peakRoutes);
 app.use(`${API_PREFIX}/trekking`, trekkingRoutes);
 app.use(`${API_PREFIX}/gallery`, galleryRoutes);
 app.use(`${API_PREFIX}/pages`, pageRoutes);
-//app.use(`${API_PREFIX}/navigation`, navigationRoutes);
+app.use(`${API_PREFIX}/navigation`, navigationRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

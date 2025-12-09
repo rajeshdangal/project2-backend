@@ -1,127 +1,175 @@
 const { pool } = require('../config/database');
 
 class TrekkingRoute {
-    // Get all trekking routes
-    static async findAll({ page = 1, limit = 10, difficulty, region, search = '' }) {
-        const offset = (page - 1) * limit;
-        
-        let query = `SELECT * FROM trekking_routes WHERE 1=1`;
-        const params = [];
-        
-        if (difficulty) {
-            query += ` AND difficulty = ?`;
-            params.push(difficulty);
+    // SIMPLIFIED - Get all trekking routes
+    static async findAll() {
+        try {
+            const [rows] = await pool.execute('SELECT * FROM trekking_routes ORDER BY name');
+            
+            return {
+                routes: rows,
+                pagination: {
+                    total: rows.length,
+                    page: 1,
+                    limit: rows.length,
+                    totalPages: 1
+                }
+            };
+        } catch (error) {
+            console.error('Database error in TrekkingRoute.findAll:', error);
+            throw error;
         }
-        
-        if (region) {
-            query += ` AND region = ?`;
-            params.push(region);
-        }
-        
-        if (search) {
-            query += ` AND (name LIKE ? OR description LIKE ?)`;
-            const searchTerm = `%${search}%`;
-            params.push(searchTerm, searchTerm);
-        }
-        
-        query += ` LIMIT ? OFFSET ?`;
-        params.push(limit, offset);
-        
-        const [rows] = await pool.execute(query, params);
-        
-        // Get total count
-        const countQuery = `SELECT COUNT(*) as total FROM trekking_routes`;
-        const [countResult] = await pool.execute(countQuery);
-        const total = countResult[0].total;
-        
-        return {
-            routes: rows,
-            pagination: {
-                total,
-                page: parseInt(page),
-                limit: parseInt(limit),
-                totalPages: Math.ceil(total / limit)
-            }
-        };
     }
     
     // Get route by ID
     static async findById(id) {
-        const [rows] = await pool.execute(
-            'SELECT * FROM trekking_routes WHERE route_id = ?',
-            [id]
-        );
-        return rows[0];
+        try {
+            const [rows] = await pool.execute(
+                'SELECT * FROM trekking_routes WHERE route_id = ?',
+                [parseInt(id)]
+            );
+            return rows[0] || null;
+        } catch (error) {
+            console.error('Database error in TrekkingRoute.findById:', error);
+            throw error;
+        }
     }
     
     // Get route by slug
     static async findBySlug(slug) {
-        const [rows] = await pool.execute(
-            'SELECT * FROM trekking_routes WHERE slug = ?',
-            [slug]
-        );
-        return rows[0];
+        try {
+            const [rows] = await pool.execute(
+                'SELECT * FROM trekking_routes WHERE slug = ?',
+                [slug]
+            );
+            return rows[0] || null;
+        } catch (error) {
+            console.error('Database error in TrekkingRoute.findBySlug:', error);
+            throw error;
+        }
     }
     
     // Create new route
     static async create(routeData) {
-        const { name, difficulty, duration_days, region, description, map_image_url, slug } = routeData;
-        
-        const [result] = await pool.execute(
-            `INSERT INTO trekking_routes (name, difficulty, duration_days, region, description, map_image_url, slug)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [name, difficulty, duration_days, region, description, map_image_url, slug]
-        );
-        
-        return this.findById(result.insertId);
+        try {
+            const { name, difficulty, duration_days, region, description, map_image_url, slug } = routeData;
+            
+            const [result] = await pool.execute(
+                `INSERT INTO trekking_routes (name, difficulty, duration_days, region, description, map_image_url, slug)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    name || '',
+                    difficulty || 'Moderate',
+                    duration_days || null,
+                    region || '',
+                    description || '',
+                    map_image_url || '',
+                    slug || ''
+                ]
+            );
+            
+            return this.findById(result.insertId);
+        } catch (error) {
+            console.error('Database error in TrekkingRoute.create:', error);
+            throw error;
+        }
     }
     
     // Update route
     static async update(id, routeData) {
-        const fields = [];
-        const values = [];
-        
-        Object.keys(routeData).forEach(key => {
-            if (routeData[key] !== undefined) {
-                fields.push(`${key} = ?`);
-                values.push(routeData[key]);
+        try {
+            const fields = [];
+            const values = [];
+            
+            // Build update query
+            if (routeData.name !== undefined) {
+                fields.push('name = ?');
+                values.push(routeData.name);
             }
-        });
-        
-        if (fields.length === 0) {
+            if (routeData.difficulty !== undefined) {
+                fields.push('difficulty = ?');
+                values.push(routeData.difficulty);
+            }
+            if (routeData.duration_days !== undefined) {
+                fields.push('duration_days = ?');
+                values.push(routeData.duration_days);
+            }
+            if (routeData.region !== undefined) {
+                fields.push('region = ?');
+                values.push(routeData.region);
+            }
+            if (routeData.description !== undefined) {
+                fields.push('description = ?');
+                values.push(routeData.description);
+            }
+            if (routeData.map_image_url !== undefined) {
+                fields.push('map_image_url = ?');
+                values.push(routeData.map_image_url);
+            }
+            if (routeData.slug !== undefined) {
+                fields.push('slug = ?');
+                values.push(routeData.slug);
+            }
+            
+            if (fields.length === 0) {
+                return this.findById(id);
+            }
+            
+            values.push(parseInt(id));
+            
+            const [result] = await pool.execute(
+                `UPDATE trekking_routes SET ${fields.join(', ')} WHERE route_id = ?`,
+                values
+            );
+            
+            if (result.affectedRows === 0) {
+                return null;
+            }
+            
             return this.findById(id);
+        } catch (error) {
+            console.error('Database error in TrekkingRoute.update:', error);
+            throw error;
         }
-        
-        values.push(id);
-        
-        const [result] = await pool.execute(
-            `UPDATE trekking_routes SET ${fields.join(', ')} WHERE route_id = ?`,
-            values
-        );
-        
-        if (result.affectedRows === 0) {
-            return null;
-        }
-        
-        return this.findById(id);
     }
     
     // Delete route
     static async delete(id) {
-        const [result] = await pool.execute(
-            'DELETE FROM trekking_routes WHERE route_id = ?',
-            [id]
-        );
-        return result.affectedRows > 0;
+        try {
+            const [result] = await pool.execute(
+                'DELETE FROM trekking_routes WHERE route_id = ?',
+                [parseInt(id)]
+            );
+            return result.affectedRows > 0;
+        } catch (error) {
+            console.error('Database error in TrekkingRoute.delete:', error);
+            throw error;
+        }
     }
     
     // Get routes by difficulty
     static async findByDifficulty(difficulty) {
-        const [rows] = await pool.execute(
-            'SELECT * FROM trekking_routes WHERE difficulty = ? ORDER BY duration_days',
-            [difficulty]
-        );
-        return rows;
+        try {
+            const [rows] = await pool.execute(
+                'SELECT * FROM trekking_routes WHERE difficulty = ? ORDER BY duration_days',
+                [difficulty]
+            );
+            return rows;
+        } catch (error) {
+            console.error('Database error in TrekkingRoute.findByDifficulty:', error);
+            throw error;
+        }
+    }
+    
+    // SIMPLE METHOD - For testing
+    static async getAllSimple() {
+        try {
+            const [rows] = await pool.execute('SELECT * FROM trekking_routes');
+            return rows;
+        } catch (error) {
+            console.error('Database error in TrekkingRoute.getAllSimple:', error);
+            throw error;
+        }
     }
 }
 
